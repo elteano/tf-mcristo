@@ -8,8 +8,8 @@ import customlstm
 from customlstm import Lstm
 from tensorflow.python import debug as tf_debug
 
-batch_size = 2
-num_units = 256
+batch_size = 100
+num_units = 128
 num_epochs = 20
 mat_fname = 'cmonte.npy'
 p_fname = 'cmonte.dat'
@@ -108,9 +108,12 @@ sm = tf.nn.softmax(o, name='test_softmax')
 loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=otp, logits=o)
 losses = tf.reduce_mean(loss, name='loss_mean')
 print('Losses is {:}'.format(losses))
-optimizer = tf.train.AdagradOptimizer(learn_rate)
-train_step = optimizer.compute_gradients(losses)
-apply_step = optimizer.apply_gradients(train_step, name='apply_gradients')
+optimizer = tf.train.AdadeltaOptimizer(learn_rate)
+#train_step = optimizer.compute_gradients(losses)
+#apply_step = optimizer.apply_gradients(train_step, name='apply_gradients')
+train_step = tf.contrib.slim.learning.create_train_op(losses, optimizer,summarize_gradients=True)
+
+saver = tf.train.Saver()
 
 mergesummary = tf.summary.merge_all()
 
@@ -120,25 +123,29 @@ print("Shapes: {:}, {:}".format(z_c.shape, z_m.shape))
 print('Beginning the session.')
 with tf.Session() as sess:
     sess.run(tf.global_variables_initializer())
-    sess = tf_debug.LocalCLIDebugWrapperSession(sess)
+    #sess = tf_debug.LocalCLIDebugWrapperSession(sess)
     writer = tf.summary.FileWriter('log/', sess.graph)
     for ep in range(num_epochs):
         print('Starting epoch {:}'.format(ep))
         run_loss = []
         weights = []
         for bat in range(num_batches):
-            _train_step, _loss, _apply_step = sess.run([train_step, losses, apply_step], feed_dict={
+            _train_step, _loss, _ws, _summ = sess.run([train_step, losses, Ws, mergesummary], feed_dict={
             st_c:z_c, st_m:z_m, inp:procIn[bat], otp:[procOut[bat]]
             })
-            weights.append(sess.run(lstm.weights))
+            writer.add_summary(_summ)
+            weights.append(_ws)
             run_loss.append(_loss)
-            if len(weights) > 1:
-                if (weights[-2] == weights[-1]).all():
-                    print('-2 is equal to -1')
-            #if bat > 0 and bat % 1000 == 0:
-            if bat == 5:
-                exit()
-            if True:
+            #if len(weights) > 1:
+            #    if (weights[-2] == weights[-1]).all():
+            #        print('-2 is equal to -1')
+            #if bat == 5:
+            #    writer.flush()
+            #    import code
+            #    code.interact(local=locals())
+            #    exit()
+            #if True:
+            if bat > 0 and bat % 1000 == 0:
                 aloss = np.median(run_loss)
                 minloss = np.min(run_loss)
                 maxloss = np.max(run_loss)
@@ -146,4 +153,5 @@ with tf.Session() as sess:
                 run_loss = []
                 #print('Output at batch {:}: {:}'.format(bat, _o[-1]))
                 #print('Expected at batch {:}: {:}'.format(bat, procOut[bat][-1]))
+        print('Checkpoint created: {:}'.format(saver.save(sess, 'saves/gup.ckpt')))
     writer.close()

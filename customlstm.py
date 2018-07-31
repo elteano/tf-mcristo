@@ -29,15 +29,15 @@ class Lstm(object):
             self.__Bc = self.__gen_bias(name='Bc')
 
     def __gen_input_weight(self, name=None):
-        return tf.Variable(np.random.rand(self.__num_units, self.__input_elems), dtype=tf.float32, name=name)
+        return tf.Variable(np.random.rand(self.__num_units, self.__input_elems) / self.__num_units, dtype=tf.float32, name=name)
 
     def __gen_rec_weight(self, name=None):
-        return tf.Variable(np.random.rand(self.__num_units, self.__num_units), dtype=tf.float32, name=name)
+        return tf.Variable(np.random.rand(self.__num_units, self.__num_units) / self.__num_units, dtype=tf.float32, name=name)
 
     def __gen_bias(self, name=None):
         return tf.Variable(np.zeros((self.__num_units, 1)), dtype=tf.float32, name=name)
 
-    def call(self, input, prev_out, prev_state):
+    def call(self, input, prev_state, prev_out):
         with self.__scope:
             with tf.name_scope('call'):
                 x = tf.reshape(input, (self.__input_elems, 1), name='Input_reshape')
@@ -51,7 +51,7 @@ class Lstm(object):
 
     @property
     def weights(self):
-        return (self.__Wf)
+        return (self.__Wo)
 
     def zero_state(self):
         return (np.zeros((self.__num_units, 1), dtype=np.float32),
