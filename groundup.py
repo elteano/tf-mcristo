@@ -13,7 +13,7 @@ num_units = 256
 num_epochs = 20
 mat_fname = 'cmonte.npy'
 p_fname = 'cmonte.dat'
-learn_rate = 0.3
+learn_rate = 0.001
 
 def oh_encode(arr, num_bins=None, num_rows=None):
     if not num_bins:
@@ -105,7 +105,7 @@ sm = tf.nn.softmax(o, name='test_softmax')
 #o = tf.concat(o, 0)
 loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=otp, logits=o)
 losses = tf.reduce_mean(loss, name='loss_mean')
-optimizer = tf.train.AdadeltaOptimizer(learn_rate)
+optimizer = tf.train.AdamOptimizer(learn_rate)
 #train_step = optimizer.compute_gradients(losses)
 #apply_step = optimizer.apply_gradients(train_step, name='apply_gradients')
 train_step = optimizer.minimize(losses)
