@@ -82,7 +82,6 @@ otp = tf.placeholder(tf.int32, [1], name='Output_placeholder')
 st_c = tf.placeholder(tf.float32, [num_units, 1], name='c_state_inp')
 st_m = tf.placeholder(tf.float32, [num_units, 1], name='m_state_inp')
 
-#us_inp = list(map(lambda a : tf.reshape(a, (1,1)), tf.unstack(inp)))
 us_inp = tf.unstack(inp)
 
 lstm = Lstm(num_units, us_inp[0].get_shape())
@@ -90,14 +89,13 @@ lstm = Lstm(num_units, us_inp[0].get_shape())
 Ws = tf.Variable(np.random.rand(num_units, uchars), dtype=tf.float32, name='Out_categorize')
 bs = tf.Variable(np.zeros((1, uchars)), dtype=tf.float32, name='Categorize_bias')
 
-#lstm.build(us_inp[0].get_shape())
-
 st_ci, st_mi = st_c, st_m
 o = []
 st_i = tf.contrib.rnn.LSTMStateTuple(c=st_c, h=st_m)
 for i in range(batch_size):
     o_i, st_ci, st_mi = lstm.call(us_inp[i], st_ci, st_mi)
 
+o_i = tf.nn.dropout(o_i, 0.3)
 o_i = tf.add(tf.matmul(tf.transpose(o_i), Ws, name='out_categorization'), bs, name='out_cat_add_bias')
     #o_i = tf.nn.softmax(tf.matmul(tf.transpose(o_i), Ws) + bs)
     #o.append(o_i)
@@ -107,11 +105,11 @@ sm = tf.nn.softmax(o, name='test_softmax')
 #o = tf.concat(o, 0)
 loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=otp, logits=o)
 losses = tf.reduce_mean(loss, name='loss_mean')
-print('Losses is {:}'.format(losses))
 optimizer = tf.train.AdadeltaOptimizer(learn_rate)
 #train_step = optimizer.compute_gradients(losses)
 #apply_step = optimizer.apply_gradients(train_step, name='apply_gradients')
-train_step = tf.contrib.slim.learning.create_train_op(losses, optimizer,summarize_gradients=True)
+train_step = optimizer.minimize(losses)
+#train_step = tf.contrib.slim.learning.create_train_op(losses, optimizer,summarize_gradients=True)
 
 saver = tf.train.Saver()
 
@@ -124,34 +122,21 @@ print('Beginning the session.')
 with tf.Session() as sess:
     sess.run(tf.global_variables_initializer())
     #sess = tf_debug.LocalCLIDebugWrapperSession(sess)
-    writer = tf.summary.FileWriter('log/', sess.graph)
+    #writer = tf.summary.FileWriter('log/', sess.graph)
     for ep in range(num_epochs):
         print('Starting epoch {:}'.format(ep))
         run_loss = []
-        weights = []
         for bat in range(num_batches):
-            _train_step, _loss, _ws, _summ = sess.run([train_step, losses, Ws, mergesummary], feed_dict={
+            _train_step, _loss = sess.run([train_step, losses], feed_dict={
             st_c:z_c, st_m:z_m, inp:procIn[bat], otp:[procOut[bat]]
             })
-            writer.add_summary(_summ)
-            weights.append(_ws)
+            #writer.add_summary(_summ)
             run_loss.append(_loss)
-            #if len(weights) > 1:
-            #    if (weights[-2] == weights[-1]).all():
-            #        print('-2 is equal to -1')
-            #if bat == 5:
-            #    writer.flush()
-            #    import code
-            #    code.interact(local=locals())
-            #    exit()
-            #if True:
             if bat > 0 and bat % 1000 == 0:
                 aloss = np.median(run_loss)
                 minloss = np.min(run_loss)
                 maxloss = np.max(run_loss)
                 print('Loss at batch {:} of {:}: {:} ({:} to {:})'.format(bat, num_batches, aloss, minloss, maxloss))
                 run_loss = []
-                #print('Output at batch {:}: {:}'.format(bat, _o[-1]))
-                #print('Expected at batch {:}: {:}'.format(bat, procOut[bat][-1]))
         print('Checkpoint created: {:}'.format(saver.save(sess, 'saves/gup.ckpt')))
-    writer.close()
+    #writer.close()
