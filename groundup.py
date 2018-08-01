@@ -9,7 +9,7 @@ from customlstm import Lstm
 from tensorflow.python import debug as tf_debug
 
 batch_size = 100
-num_units = 128
+num_units = 256
 num_epochs = 20
 mat_fname = 'cmonte.npy'
 p_fname = 'cmonte.dat'
