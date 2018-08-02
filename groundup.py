@@ -8,7 +8,7 @@ import customlstm
 from customlstm import Lstm
 from tensorflow.python import debug as tf_debug
 
-batch_size = 100
+seq_length = 100
 num_units = 256
 num_epochs = 20
 mat_fname = 'cmonte.npy'
@@ -52,13 +52,13 @@ else:
     with open(p_fname, 'wb') as pf:
         pickle.dump((chars, uchars, text_len, m_text), pf)
 
-num_batches = (text_len // batch_size) * (batch_size)
+num_batches = (text_len // seq_length) * (seq_length)
 dataIn = []
 dataOut = []
-for i in range(text_len - batch_size):
-    seq_in = m_text[i:i+batch_size]
-    #seq_out = oh_text[i+batch_size:i+batch_size+1,:]
-    seq_out = m_text[i+batch_size]
+for i in range(text_len - seq_length):
+    seq_in = m_text[i:i+seq_length]
+    #seq_out = oh_text[i+seq_length:i+seq_length+1,:]
+    seq_out = m_text[i+seq_length]
     dataIn.append(seq_in)
     dataOut.append(seq_out)
 
@@ -69,7 +69,7 @@ print('Number of patterns: {:}'.format(n_patterns))
 
 print('Formatting data...')
 # Here we have the extra dimension so that unstack results in shapes of (1,1)
-procIn = np.reshape(dataIn, (n_patterns, batch_size, 1, 1))
+procIn = np.reshape(dataIn, (n_patterns, seq_length, 1, 1))
 procIn = procIn / float(uchars)
 #procOut = oh_encode(dataOut, num_bins=uchars)
 procOut = dataOut
@@ -77,7 +77,7 @@ print('Data formatted.')
 
 
 print('Preparing model')
-inp = tf.placeholder(tf.float32, [batch_size, 1, 1], name='Input_placeholder')
+inp = tf.placeholder(tf.float32, [seq_length, 1, 1], name='Input_placeholder')
 otp = tf.placeholder(tf.int32, [1], name='Output_placeholder')
 st_c = tf.placeholder(tf.float32, [num_units, 1], name='c_state_inp')
 st_m = tf.placeholder(tf.float32, [num_units, 1], name='m_state_inp')
@@ -92,7 +92,7 @@ bs = tf.Variable(np.zeros((1, uchars)), dtype=tf.float32, name='Categorize_bias'
 st_ci, st_mi = st_c, st_m
 o = []
 st_i = tf.contrib.rnn.LSTMStateTuple(c=st_c, h=st_m)
-for i in range(batch_size):
+for i in range(seq_length):
     o_i, st_ci, st_mi = lstm.call(us_inp[i], st_ci, st_mi)
 
 o_i = tf.nn.dropout(o_i, 0.3)
