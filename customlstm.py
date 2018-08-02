@@ -54,5 +54,5 @@ class Lstm(object):
         return (self.__Wo)
 
     def zero_state(self):
-        return (np.zeros((self.__num_units, 1), dtype=np.float32),
-            np.zeros((self.__num_units, 1), dtype=np.float32))
+        return (tf.constant(np.zeros((self.__num_units, 1), dtype=np.float32), dtype=tf.float32),
+            tf.constant(np.zeros((self.__num_units, 1), dtype=np.float32), dtype=tf.float32))

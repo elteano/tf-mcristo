@@ -28,7 +28,7 @@ def oh_encode(arr, num_bins=None, num_rows=None):
 
 # Read and process the text
 if (os.path.isfile(mat_fname) and os.path.isfile(p_fname)):
-    oh_text = np.load(mat_fname)
+    #oh_text = np.load(mat_fname)
     with open (p_fname, 'rb') as pf:
         chars, uchars, text_len, m_text = pickle.load(pf)
 else:
@@ -48,8 +48,8 @@ else:
 
     m_text = [char_to_int[c] for c in raw_text]
     del raw_text
-    oh_text = oh_encode(m_text, num_bins = uchars)
-    np.save(mat_fname, oh_text)
+    #oh_text = oh_encode(m_text, num_bins = uchars)
+    #np.save(mat_fname, oh_text)
     with open(p_fname, 'wb') as pf:
         pickle.dump((chars, uchars, text_len, m_text), pf)
 
@@ -72,17 +72,35 @@ print('Formatting data...')
 # Here we have the extra dimension so that unstack results in shapes of (1,1)
 procIn = np.reshape(dataIn, (n_patterns, seq_length, 1, 1))
 procIn = procIn / float(uchars)
+#procIn = tf.constant(procIn, dtype=tf.float32)
 #procOut = oh_encode(dataOut, num_bins=uchars)
-procOut = dataOut
+procOut = np.reshape(dataOut, (n_patterns, 1))
+#procOut = tf.constant(procOut, dtype=tf.int32)
 print('Data formatted.')
 
 
-print('Preparing model')
-inp = tf.placeholder(tf.float32, [seq_length, 1, 1], name='Input_placeholder')
-otp = tf.placeholder(tf.int32, [1], name='Output_placeholder')
-st_c = tf.placeholder(tf.float32, [num_units, 1], name='c_state_inp')
-st_m = tf.placeholder(tf.float32, [num_units, 1], name='m_state_inp')
+in_shape = list(procIn.shape[:])
+in_shape[0] = None
+out_shape = list(procOut.shape[:])
+out_shape[0] = None
+print('in_shape: {:}\nout_shape: {:}'.format(in_shape, out_shape))
+inp_ph = tf.placeholder(tf.float32, in_shape, name='input_placeholder')
+otp_ph = tf.placeholder(tf.int32, out_shape, name='output_placeholder')
+print('Preparing input dataset')
+# This section can take HUGE amount of RAM, which may result in Python / Tensorflow bailing without warning
+inp_dataset = tf.data.Dataset.from_tensor_slices(inp_ph)
+print('Input data shape: {:}'.format(inp_dataset.output_shapes))
+print('Input data type: {:}'.format(inp_dataset.output_types))
+inp_iterator = inp_dataset.make_initializable_iterator()
+inp = inp_iterator.get_next()
+#del procIn # Don't need this big array anymore, get some heap back
+otp_dataset = tf.data.Dataset.from_tensor_slices(otp_ph)
+print('Output data shape: {:}'.format(otp_dataset.output_shapes))
+otp_iterator = otp_dataset.make_initializable_iterator()
+otp = otp_iterator.get_next()
+#del procOut # Don't need this one either, get more heap back
 
+print('Preparing model')
 us_inp = tf.unstack(inp)
 
 lstm = Lstm(num_units, us_inp[0].get_shape())
@@ -90,9 +108,8 @@ lstm = Lstm(num_units, us_inp[0].get_shape())
 Ws = tf.Variable(np.random.rand(num_units, uchars), dtype=tf.float32, name='Out_categorize')
 bs = tf.Variable(np.zeros((1, uchars)), dtype=tf.float32, name='Categorize_bias')
 
-st_ci, st_mi = st_c, st_m
+st_ci, st_mi = lstm.zero_state()
 o = []
-st_i = tf.contrib.rnn.LSTMStateTuple(c=st_c, h=st_m)
 for i in range(seq_length):
     o_i, st_ci, st_mi = lstm.call(us_inp[i], st_ci, st_mi)
 
@@ -116,23 +133,23 @@ saver = tf.train.Saver()
 
 mergesummary = tf.summary.merge_all()
 
-z_c, z_m = lstm.zero_state()
-print("Shapes: {:}, {:}".format(z_c.shape, z_m.shape))
-
 print('Beginning the session.')
 with tf.Session() as sess:
+    print('Initializing variables')
     sess.run(tf.global_variables_initializer())
     #sess = tf_debug.LocalCLIDebugWrapperSession(sess)
     #writer = tf.summary.FileWriter('log/', sess.graph)
+    print('Initializing iterators.')
+    sess.run(inp_iterator.initializer, feed_dict={inp_ph:procIn})
+    sess.run(otp_iterator.initializer, feed_dict={otp_ph:procOut})
+    print('About to train.')
     for ep in range(num_epochs):
         print('Starting epoch {:}'.format(ep))
         ptime = datetime.datetime.now()
         ttime = datetime.timedelta()
         run_loss = []
         for bat in range(num_batches):
-            _train_step, _loss = sess.run([train_step, losses], feed_dict={
-            st_c:z_c, st_m:z_m, inp:procIn[bat], otp:[procOut[bat]]
-            })
+            _train_step, _loss = sess.run([train_step, losses])
             #writer.add_summary(_summ)
             run_loss.append(_loss)
             if bat > 0 and bat % 1000 == 0:
