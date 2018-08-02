@@ -7,6 +7,7 @@ import pickle
 import customlstm
 from customlstm import Lstm
 from tensorflow.python import debug as tf_debug
+import datetime
 
 seq_length = 100
 num_units = 256
@@ -125,6 +126,8 @@ with tf.Session() as sess:
     #writer = tf.summary.FileWriter('log/', sess.graph)
     for ep in range(num_epochs):
         print('Starting epoch {:}'.format(ep))
+        ptime = datetime.datetime.now()
+        ttime = datetime.timedelta()
         run_loss = []
         for bat in range(num_batches):
             _train_step, _loss = sess.run([train_step, losses], feed_dict={
@@ -133,10 +136,18 @@ with tf.Session() as sess:
             #writer.add_summary(_summ)
             run_loss.append(_loss)
             if bat > 0 and bat % 1000 == 0:
+                ctime = datetime.datetime.now()
                 aloss = np.median(run_loss)
                 minloss = np.min(run_loss)
                 maxloss = np.max(run_loss)
-                print('Loss at batch {:} of {:}: {:} ({:} to {:})'.format(bat, num_batches, aloss, minloss, maxloss))
+                print('+Loss at batch {:} of {:}: {:} ({:} to {:})'.format(bat, batch_size, aloss, minloss, maxloss))
+                dtime = ctime - ptime
+                ttime += dtime
+                print('|\tTime elapsed (current set / total): {:} / {:}'.format(str(dtime), str(ttime)))
+                remaining = (batch_size - bat) * (dtime / 1000)
+                print('|\tEstimated epoch duration (remaining / total): {:} / {:}   '.format(str(remaining), str(ttime+remaining)))
+                print('|\tEstimated time of epoch completion: {:}'.format((datetime.datetime.now() + remaining).ctime()))
                 run_loss = []
+                ptime = datetime.datetime.now()
         print('Checkpoint created: {:}'.format(saver.save(sess, 'saves/gup.ckpt')))
     #writer.close()
