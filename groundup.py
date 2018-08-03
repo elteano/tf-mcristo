@@ -12,6 +12,7 @@ import datetime
 seq_length = 100
 num_units = 256
 num_epochs = 20
+batch_size = 100
 mat_fname = 'cmonte.npy'
 p_fname = 'cmonte.dat'
 learn_rate = 0.001
@@ -53,7 +54,7 @@ else:
     with open(p_fname, 'wb') as pf:
         pickle.dump((chars, uchars, text_len, m_text), pf)
 
-num_batches = (text_len // seq_length) * (seq_length)
+n_batches = (text_len // seq_length) * (seq_length)
 dataIn = []
 dataOut = []
 for i in range(text_len - seq_length):
@@ -64,17 +65,21 @@ for i in range(text_len - seq_length):
     dataOut.append(seq_out)
 
 n_patterns = len(dataIn)
+n_batches = n_patterns // batch_size
+n_patterns =  n_batches * batch_size
 del m_text
 
-print('Number of patterns: {:}'.format(n_patterns))
+print('Batch size: {:}'.format(batch_size))
+print('Number of usable patterns: {:} (total {:})'.format(n_patterns, len(dataIn)))
+print('Number of batches: {:}'.format(n_batches))
 
 print('Formatting data...')
 # Here we have the extra dimension so that unstack results in shapes of (1,1)
-procIn = np.reshape(dataIn, (n_patterns, seq_length, 1, 1))
+procIn = np.reshape(dataIn[:n_patterns], (n_batches, seq_length, 1, batch_size))
 procIn = procIn / float(uchars)
 #procIn = tf.constant(procIn, dtype=tf.float32)
 #procOut = oh_encode(dataOut, num_bins=uchars)
-procOut = np.reshape(dataOut, (n_patterns, 1))
+procOut = np.reshape(dataOut[:n_patterns], (n_batches, batch_size))
 #procOut = tf.constant(procOut, dtype=tf.int32)
 print('Data formatted.')
 
@@ -101,9 +106,11 @@ otp = otp_iterator.get_next()
 #del procOut # Don't need this one either, get more heap back
 
 print('Preparing model')
-us_inp = tf.unstack(inp)
+us_inp = tf.unstack(inp, axis=0)
+lstm_inp_shape = list(us_inp[0].get_shape())
+lstm_inp_shape[-1] = 1
 
-lstm = Lstm(num_units, us_inp[0].get_shape())
+lstm = Lstm(num_units, us_inp[0].get_shape(), batch_size=batch_size)
 
 Ws = tf.Variable(np.random.rand(num_units, uchars), dtype=tf.float32, name='Out_categorize')
 bs = tf.Variable(np.zeros((1, uchars)), dtype=tf.float32, name='Categorize_bias')
@@ -139,16 +146,15 @@ with tf.Session() as sess:
     sess.run(tf.global_variables_initializer())
     #sess = tf_debug.LocalCLIDebugWrapperSession(sess)
     #writer = tf.summary.FileWriter('log/', sess.graph)
-    print('Initializing iterators.')
-    sess.run(inp_iterator.initializer, feed_dict={inp_ph:procIn})
-    sess.run(otp_iterator.initializer, feed_dict={otp_ph:procOut})
-    print('About to train.')
     for ep in range(num_epochs):
         print('Starting epoch {:}'.format(ep))
         ptime = datetime.datetime.now()
+        print('Initializing iterators.')
+        sess.run(inp_iterator.initializer, feed_dict={inp_ph:procIn})
+        sess.run(otp_iterator.initializer, feed_dict={otp_ph:procOut})
         ttime = datetime.timedelta()
         run_loss = []
-        for bat in range(num_batches):
+        for bat in range(n_batches):
             _train_step, _loss = sess.run([train_step, losses])
             #writer.add_summary(_summ)
             run_loss.append(_loss)
@@ -157,11 +163,11 @@ with tf.Session() as sess:
                 aloss = np.median(run_loss)
                 minloss = np.min(run_loss)
                 maxloss = np.max(run_loss)
-                print('+Loss at batch {:} of {:}: {:} ({:} to {:})'.format(bat, batch_size, aloss, minloss, maxloss))
+                print('+Loss at batch {:} of {:}: {:} ({:} to {:})'.format(bat, n_batches, aloss, minloss, maxloss))
                 dtime = ctime - ptime
                 ttime += dtime
                 print('|\tTime elapsed (current set / total): {:} / {:}'.format(str(dtime), str(ttime)))
-                remaining = (batch_size - bat) * (dtime / 1000)
+                remaining = (n_batches - bat) * (dtime / 1000)
                 print('|\tEstimated epoch duration (remaining / total): {:} / {:}   '.format(str(remaining), str(ttime+remaining)))
                 print('|\tEstimated time of epoch completion: {:}'.format((datetime.datetime.now() + remaining).ctime()))
                 run_loss = []
